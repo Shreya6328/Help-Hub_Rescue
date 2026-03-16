@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class ResolvePage extends StatefulWidget {
   final int alertId;
@@ -15,7 +16,8 @@ class _ResolvePageState extends State<ResolvePage> {
   final picker = ImagePicker();
   final supabase = Supabase.instance.client;
 
-  List<File> images = [];
+  // List<File> images = [];
+  List<XFile> images = [];
   bool loading = false;
 
   Future<void> pickImage() async {
@@ -23,7 +25,8 @@ class _ResolvePageState extends State<ResolvePage> {
 
     final picked = await picker.pickImage(source: ImageSource.camera);
     if (picked != null) {
-      setState(() => images.add(File(picked.path)));
+      // setState(() => images.add(File(picked.path)));
+      setState(() => images.add(picked));
     }
   }
 
@@ -35,30 +38,48 @@ class _ResolvePageState extends State<ResolvePage> {
     try {
       List<String> imageUrls = [];
 
+      // for (int i = 0; i < images.length; i++) {
+      //   final file = images[i];
+      //   final path =
+      //       'proofs/alert_${widget.alertId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+
+      //   await supabase.storage
+      //       .from('sos_proofs')
+      //       .upload(path, file, fileOptions: const FileOptions(upsert: true));
+
+      //   final url = supabase.storage.from('sos_proofs').getPublicUrl(path);
+      //   imageUrls.add(url);
+      // }
+
       for (int i = 0; i < images.length; i++) {
         final file = images[i];
+
         final path =
             'proofs/alert_${widget.alertId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
 
-        await supabase.storage
-            .from('sos_proofs')
-            .upload(path, file, fileOptions: const FileOptions(upsert: true));
+        final bytes = await file.readAsBytes();
+
+        await supabase.storage.from('sos_proofs').uploadBinary(path, bytes);
 
         final url = supabase.storage.from('sos_proofs').getPublicUrl(path);
+
         imageUrls.add(url);
       }
 
-      await supabase.from('sos_alerts').update({
-        'status': 'awaiting_user_confirmation',
-        'resolved_photos': imageUrls,
-        'resolved_at': DateTime.now().toIso8601String(),
-      }).eq('id', widget.alertId);
+      await supabase
+          .from('sos_alerts')
+          .update({
+            'status': 'awaiting_user_confirmation',
+            'resolved_photos': imageUrls,
+            'resolved_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', widget.alertId);
 
       Navigator.popUntil(context, (r) => r.isFirst);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       setState(() => loading = false);
     }
@@ -79,7 +100,23 @@ class _ResolvePageState extends State<ResolvePage> {
               spacing: 10,
               runSpacing: 10,
               children: images
-                  .map((img) => Image.file(img, height: 100, width: 100))
+                  // .map((img) => Image.file(img, height: 100, width: 100))
+                  .map(
+                    // (img) => Image.network(img.path, height: 100, width: 100),
+                    (img) => kIsWeb
+                        ? Image.network(
+                            img.path,
+                            height: 100,
+                            width: 100,
+                            fit: BoxFit.cover,
+                          )
+                        : Image.file(
+                            File(img.path),
+                            height: 100,
+                            width: 100,
+                            fit: BoxFit.cover,
+                          ),
+                  )
                   .toList(),
             ),
             const SizedBox(height: 20),
